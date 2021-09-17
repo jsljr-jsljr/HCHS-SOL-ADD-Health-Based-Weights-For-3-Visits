@@ -1,0 +1,584 @@
+---
+title: "Weight creation outline based on ADD Health procedures"
+author: "Jose S. Lopez"
+date: "9/10/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(message = FALSE, warning = FALSE, include=TRUE,
+                      fig.width = 10, fig.height = 5)
+
+library(tidyverse)
+library(data.table)
+library(dbplyr)
+```
+
+## Introduction
+
+The following is an outline for the HCHS/SOL Weight creation based on Add Health Procedures.
+
+```{r data input, echo=FALSE}
+
+sample1_01 <- read.csv("C:\\Users\\offic\\HCHS-SOL\\CAI\\0001 - 3 Visits Attrition Weighting\\practice samples\\sample_1.csv")
+
+#typeof(sample1_01$hhid)
+#typeof(sample1_01$BGid)
+#typeof(sample1_01$subid)
+
+#view(sample1_01)
+
+sample1_v1_01 <- filter(sample1_01, v_num==1)
+sample1_v2_01 <- filter(sample1_01, v_num==2)
+sample1_v3_01 <- filter(sample1_01, v_num==3)
+
+population_01 <- read.csv("C:\\Users\\offic\\HCHS-SOL\\CAI\\0001 - 3 Visits Attrition Weighting\\practice populations\\population_3visits_Sep2021_missing.csv")
+
+#view(population_01)
+
+population_v1_01 <- filter(population_01, v_num==1)
+population_v2_01 <- filter(population_01, v_num==2)
+population_v3_01 <- filter(population_01, v_num==3)
+
+#nrow(population_v1_01) #The number of observations in the visit 1 population = 367905
+#nrow(population_v2_01) #The number of observations in the visit 2 population = 367905
+#nrow(population_v3_01) #The number of observations in the visit 3 population = 367905
+
+```
+
+## Visit Indicators
+
+```{r visit indicators, echo=FALSE}
+
+sample1_v2_indicator_1 <- rename(sample1_v2_01, v_num2=v_num)
+sample1_v2_indicator_2 <- select(sample1_v2_indicator_1, subid, v_num2)
+
+sample1_v3_indicator_1 <- rename(sample1_v3_01, v_num3=v_num)
+sample1_v3_indicator_2 <- select(sample1_v3_indicator_1, subid, v_num3)
+
+sample1_v1_02 <- full_join(sample1_v1_01, sample1_v2_indicator_2, by = c("subid"))
+
+sample1_v1_03 <- full_join(sample1_v1_02, sample1_v3_indicator_2, by = c("subid"))
+
+sample1_v1_04 <- sample1_v1_03 %>%
+                 mutate(v2 =
+                 case_when(v_num2==2 ~ 1,
+                          is.na(v_num2) ~ 0))
+
+sample1_v1_05 <- sample1_v1_04 %>%
+                 mutate(v3 =
+                 case_when(v_num3==3 ~ 1,
+                           is.na(v_num3) ~ 0))
+
+sample1_v1_06 <- sample1_v1_05 %>%
+                 mutate(v3_reappear =
+                 case_when(v2 == 0 & v3 == 1 ~ 1,
+                          v2 == 1 & v3 == 1 ~ 0,
+                          v2 == 0 & v3 == 0 ~ 0,
+                          v2 == 1 & v3 == 0 ~ 0))
+
+# Here we create the variable v123, which is an indicator variable that is 1 when a participant has attended all three visits and 0 otherwise. Variables v_num2 and v_num3 are dropped. Variable v_num is renamed to v1, so that it is consistent in naming with visit 2 (v2) and visit 3 (v3) indicators.
+sample1_v1_06 <- sample1_v1_06 %>%
+                 mutate(v123 = ifelse(v_num==1 & v2==1 & v3==1, 1, 0)) %>%
+                 select(-v_num2, -v_num3, -x0, -x1, -x2, -x3, -x4,
+                        -x6, -x8, -x12, -x13, -x14, -x15, -x17, -x18,
+                        -y_bmi, -y_gfr, -y_bin_gfr_low, -y_bin_gfr_med,
+                        -y_bin_gfr_hi) %>%
+                 rename(v1 = v_num)
+
+```
+
+```{r unique value checks 01, echo=FALSE}
+
+#Checking the number of unique BGids in V1, V2, V3.
+#Because there are different number of BGids in v1, v2, and v3 there should be different weights for each of the three visits.
+#length(unique(sample1_v1_01$BGid)) #388
+#length(unique(sample1_v2_01$BGid)) #385
+#length(unique(sample1_v3_01$BGid)) #383
+
+#Checking the number of unique hhid in V1, V2, V3.
+#Because there are different number of hhids in v1, v2, and v3 there should be different weights for each of the three visits.
+#length(unique(sample1_v1_01$hhid)) #15071
+#length(unique(sample1_v2_01$hhid)) #11605
+#length(unique(sample1_v3_01$hhid)) #11493
+
+#Checking the number of unique subid in V1, V2, V3.
+#Because there are different number of subids in v1, v2, and v3 there should be different weights for each of the three visits
+#length(unique(sample1_v1_01$subid)) #20566
+#length(unique(sample1_v2_01$subid)) #14449
+#length(unique(sample1_v3_01$subid)) #14290
+
+```
+
+### Level 3 (Block Group) weight components
+
+```{r level 3 v1 wc, echo=FALSE}
+
+# Level 3 Visit 1 Weights
+
+# Statistical Measurements for Visit 1 Weights
+#length(unique(sample1_v1_01$BGid)) # N
+#min(sample1_v1_01$W_bg)            #Minimum
+#median(sample1_v1_01$W_bg)         #Median
+#max(sample1_v1_01$W_bg)            #Maximum
+#mean(sample1_v1_01$W_bg)           #Mean
+#var(sample1_v1_01$W_bg)            #Variance
+#sum(sample1_v1_01$W_bg)            #Sum
+
+```
+
+```{r level 3 v2 wc, echo=FALSE}
+
+# Level 3 Visit 2 Weights
+
+# Here we create summation_k W_bg_k based on the block group k.
+# The variable created is sum_w_bg_by_bg. This remains consistent for
+# all visits.
+sample1_v1_07 <- sample1_v1_06 %>%
+                 group_by(BGid) %>%
+                 mutate(sum_w_bg_by_bg = sum(W_bg))
+
+# Here we create a W_bg*V2_Q_k weight that takes into consideration
+# whether a block group was a part of visit 2.
+# The variable created is w_bg_v2_r.
+sample1_v1_08 <- mutate(sample1_v1_07, w_bg_v2_r = W_bg*v2)
+
+# Here we create summation_k w_bg_v2_r on the block group k
+# and whether the block group appears in v2.
+# The variable created is sum_w_bg_by_bg_V2.
+sample1_v1_09 <- sample1_v1_08 %>%
+                 group_by(BGid) %>%
+                 mutate(sum_w_bg_by_bg_v2 = sum(w_bg_v2_r))
+
+# Finally we create the phi_k (non-response) adjusted W_bg.
+# The variable created is W_bg_v2.
+sample1_v1_10 <- mutate(sample1_v1_09,
+                        W_bg_v2 = 
+                        W_bg*(sum_w_bg_by_bg)/(sum_w_bg_by_bg_v2))
+
+# Filter out part of the sample that did not attend visit 2.
+#sample1_v2_wt_check <- filter(sample1_v1_10, v2==1)
+
+# Statistical Measurements for Visit 2 Weights
+#length(unique(sample1_v2_01$BGid))       #N
+#min(sample1_v2_wt_check$W_bg_v2)         #Minimum
+#median(sample1_v2_wt_check$W_bg_v2)      #Median
+#max(sample1_v2_wt_check$W_bg_v2)         #Maximum
+#mean(sample1_v2_wt_check$W_bg_v2)        #Mean
+#var(sample1_v2_wt_check$W_bg_v2)         #Variance
+#sum(sample1_v2_wt_check$W_bg_v2)         #Sum
+
+```
+
+```{r level 3 v3 wc 1, echo=FALSE}
+
+# Level 3 Visit 3 Weights (a part of visit 1 and visit 3)
+
+# Here we create a W_bg weight that takes into consideration
+# whether a block group was a part of visit 1 and visit 3.
+# The variable created is w_bg_v3_r_1.
+sample1_v1_11 <- mutate(sample1_v1_10, w_bg_v3_r_1 = W_bg*v3)
+
+
+# Here we create summation_k w_bg_v3_r_1 based on the block group k
+# and whether the block group appears in v1 and v3.
+# The variable created is sum_w_bg_by_bg_v3_1.
+sample1_v1_12 <- sample1_v1_11 %>%
+                 group_by(BGid) %>%
+                 mutate(sum_w_bg_by_bg_v3_1 = sum(w_bg_v3_r_1))
+
+# Finally we create the phi_k (non-response) adjusted W_bg.
+# The variable created is W_bg_v3_1.
+sample1_v1_13 <- mutate(sample1_v1_12,
+                        W_bg_v3_1 = 
+                        W_bg*(sum_w_bg_by_bg)/(sum_w_bg_by_bg_v3_1))
+
+# Filter out part of the sample that did not attend visit 1 and 3.
+#sample1_v3_wt_check_1 <- filter(sample1_v1_13, v3==1)
+
+# Statistical Measurements for Visit 3 Weights (attended v1 & v2)
+#length(unique(sample1_v3_01$BGid))      #N
+#min(sample1_v3_wt_check_1$W_bg_v3_1)    #Minimum
+#median(sample1_v3_wt_check_1$W_bg_v3_1) #Median
+#max(sample1_v3_wt_check_1$W_bg_v3_1)    #Maximum
+#mean(sample1_v3_wt_check_1$W_bg_v3_1)   #Mean
+#var(sample1_v3_wt_check_1$W_bg_v3_1)    #Variance
+#sum(sample1_v3_wt_check_1$W_bg_v3_1)    #Sum
+
+
+```
+
+```{r level 3 v3 wc 2, echo=FALSE}
+
+# Level 3 Visit 3 Weights (a part of visit 1, 2, and 3)
+
+# Here we create a W_bg weight that takes into consideration
+# whether a block group was a part of visit 1, visit 2, and visit 3.
+# The variable created is w_bg_v3_r_2.
+sample1_v1_14 <- mutate(sample1_v1_13, w_bg_v3_r_2 = W_bg*v123)
+
+# Here we create summation_k w_bg_v3_r_2 based on the block group k
+# and whether the block group appears in v1, v2, and v3.
+# The variable created is sum_w_bg_by_bg_v3_2.
+sample1_v1_15 <- sample1_v1_14 %>%
+                 group_by(BGid) %>%
+                 mutate(sum_w_bg_by_bg_v3_2 = sum(w_bg_v3_r_2))
+
+sample1_v1_16 <- mutate(sample1_v1_15,
+                        W_bg_v3_2 =
+                        W_bg*(sum_w_bg_by_bg)/(sum_w_bg_by_bg_v3_2))
+
+# Filter out part of the sample that did not attend visit 1, 2, and 3.
+sample1_v3_wt_check_2 <- filter(sample1_v1_16, v123==1)
+
+# Statistical Measurements for Visit 3 Weight (attended v1, v2, & v3)
+#length(unique(sample1_v3_wt_check_2$BGid))  #N
+#min(sample1_v3_wt_check_2$W_bg_v3_2)        #Minimum
+#median(sample1_v3_wt_check_2$W_bg_v3_2)     #Median
+#max(sample1_v3_wt_check_2$W_bg_v3_2)        #Maximum
+#mean(sample1_v3_wt_check_2$W_bg_v3_2)       #Mean
+#var(sample1_v3_wt_check_2$W_bg_v3_2)        #Variance
+#sum(sample1_v3_wt_check_2$W_bg_v3_2)        #Sum
+
+```
+
+### Level 2 (Household) weight components
+
+```{r level 2 v1 wc, echo=FALSE}
+
+# Level 2 Visit 1 Weights
+
+# Here we create summation_j W_j|k based on the block group k.
+# The variable cerated is sum_w_hh_by_bg. This remains consistent for
+# all visits.
+sample1_v1_17 <- sample1_v1_16 %>%
+                 group_by(BGid) %>%
+                 mutate(sum_w_hh_by_bg = sum(W_hh))
+
+# Here we create n_k which is the number of households in the block
+# group.
+popn_unq_hh <- population_v1_01[!duplicated(population_v1_01$hhid),]
+hh_count_by_bg <- aggregate(hhid ~ BGid, dat=popn_unq_hh, FUN=length)
+hh_count_by_bg <- hh_count_by_bg[order(hh_count_by_bg$BGid),]
+
+hh_count_by_bg <- rename(hh_count_by_bg, hh_count_by_bg = hhid)
+
+sample1_v1_18 <- merge(sample1_v1_17, hh_count_by_bg, by="BGid")
+
+# Here we create the final hh weight component for visit 1.
+sample1_v1_19 <- mutate(sample1_v1_18,
+                        W_hh_v1 =
+                        W_hh*(hh_count_by_bg)/(sum_w_hh_by_bg))
+
+#Statistical Measurements for Visit 1 Weights
+#length(unique(sample1_v1_19$hhid))  #N
+#min(sample1_v1_19$W_hh_v1)          #Minimum
+#median(sample1_v1_19$W_hh_v1)       #Median
+#max(sample1_v1_19$W_hh_v1)          #Maximum
+#mean(sample1_v1_19$W_hh_v1)         #Mean
+#var(sample1_v1_19$W_hh_v1)          #Variance
+#sum(sample1_v1_19$W_hh_v1)          #Sum
+
+```
+
+```{r level 2 v2 wc, echo=FALSE}
+
+# Level 2 Visit 2 Weights
+
+# Here we create a W_hh_v1*v2 weight that takes into consideration
+# whether a household group was a part of visit 2.
+# The variable created is w_hh_v2_r.
+sample1_v1_20 <- mutate(sample1_v1_19, w_hh_v2_r = W_hh_v1*v2)
+
+# Here we create summation_j w_hh_v2_r based on household group j
+# and whether the household appears in v2.
+# The variable created is sum_w_hh_by_bg_V2.
+sample1_v1_21 <- sample1_v1_20 %>%
+                 group_by(BGid) %>%
+                 mutate(sum_w_hh_by_bg_v2 = sum(w_hh_v2_r))
+
+# Finally we create the non-response adjusted W_hh_v1.
+# The variable created is W_hh_v2.
+sample1_v1_22 <- mutate(sample1_v1_21,
+                        W_hh_v2 =
+                        W_hh_v1*(sum_w_hh_by_bg)/(sum_w_hh_by_bg_v2))
+
+# Filter out part of the sample that did not attend visit 2.
+#sample1_v2_lv2_wt_check <- filter(sample1_v1_22, v2==1)
+
+#Statistical Measurements for level 2 Visit 2 weights
+#length(unique(sample1_v2_lv2_wt_check$hhid))  #N
+#min(sample1_v2_lv2_wt_check$W_hh_v2)        #Minimum
+#median(sample1_v2_lv2_wt_check$W_hh_v2)     #Median
+#max(sample1_v2_lv2_wt_check$W_hh_v2)        #Maximum
+#mean(sample1_v2_lv2_wt_check$W_hh_v2)       #Mean
+#var(sample1_v2_lv2_wt_check$W_hh_v2)        #Variance
+#sum(sample1_v2_lv2_wt_check$W_hh_v2)        #Sum
+
+```
+
+```{r level 2 v3 wc 1, echo=FALSE}
+
+# Level 2 Visit 3 Weights (attended v1 and v3)
+
+# Here we create W_hh_v1*V3 weight that takes into consideration
+# whether a household group was a part of visit 3.
+# The variable created is w_hh_v3_r_1.
+
+sample1_v1_23 <- mutate(sample1_v1_22, w_hh_v3_r_1 = W_hh_v1*v3)
+
+# Here we create summation_j w_hh_v3_r_1 based on household group j
+# and whether the household appears in v3.
+# The variable created is sum_w_hh_by_bg_v3_1.
+sample1_v1_24 <- sample1_v1_23 %>%
+                 group_by(BGid) %>%
+                 mutate(sum_w_hh_by_bg_v3_1 = sum(w_hh_v3_r_1))
+
+# Finally we create the non-response adjusted W_hh_v1.
+# The variable created is W_hh_v3_1.
+sample1_v1_25 <- mutate(sample1_v1_24,
+                        W_hh_v3_1 =
+                        W_hh_v1*(sum_w_hh_by_bg)/(sum_w_hh_by_bg_v3_1))
+
+# Filter out part of the sample that did not attend visit 1 and 3.
+sample1_v2_lv2_wt_check_1 <- filter(sample1_v1_25, v1==1 & v3==1)
+
+# Statistical Measurements for level 2 Visit 3 weights
+# (attended v1 & v3)
+#length(unique(sample1_v3_lv2_wt_check_1$hhid))  #N
+#min(sample1_v3_lv2_wt_check_1$W_hh_v3_1)        #Minimum
+#median(sample1_v3_lv2_wt_check_1$W_hh_v3_1)     #Median
+#max(sample1_v3_lv2_wt_check_1$W_hh_v3_1)        #Maximum
+#mean(sample1_v3_lv2_wt_check_1$W_hh_v3_1)       #Mean
+#var(sample1_v3_lv2_wt_check_1$W_hh_v3_1)        #Variance
+#sum(sample1_v3_lv2_wt_check_1$W_hh_v3_1)        #Sum
+
+```
+
+```{r level 2 v3 wc 2, echo=FALSE}
+
+# Level 2 Visit 3 Weights (attended v1, v2, and v3)
+
+# Here we create a W_hh_v1*v123 weight that takes into consideration
+# whether a household group was a part of visit 1, 2, and 3.
+# The variable created is w_hh_v3_r_2.
+sample1_v1_26 <- mutate(sample1_v1_25, w_hh_v3_r_2 = W_hh_v1*v123)
+
+
+# Here we create summation_j w_hh_v3_r_2 based on household group j
+# and whether the household appears in v1, v2, and v3.
+# The variable created is sum_w_hh_by_bg_v3_2.
+sample1_v1_27 <- sample1_v1_26 %>%
+                 group_by(BGid) %>%
+                 mutate(sum_w_hh_by_bg_v3_2 = sum(w_hh_v3_r_2))
+
+# Finally we create the non-response adjusted W_hh_v1.
+# The variable created is W_hh_v3_2.
+sample1_v1_28 <- mutate(sample1_v1_27,
+                        W_hh_v3_2 =
+                        W_hh_v1*(sum_w_hh_by_bg)/(sum_w_hh_by_bg_v3_2))
+
+# Filter out part of the sample that did not attend visit 1, 2, and 3.
+sample1_v3_lv2_wt_check_2 <- filter(sample1_v1_28, v123==1)
+
+# Statistical Measurements for level 2 Visit 3 Weights
+# (attended v1, v2, & v3)
+#length(unique(sample1_v3_lv2_wt_check_2$hhid))  #N
+#min(sample1_v3_lv2_wt_check_2$W_hh_v3_2)        #Minimum
+#median(sample1_v3_lv2_wt_check_2$W_hh_v3_2)     #Median
+#max(sample1_v3_lv2_wt_check_2$W_hh_v3_2)        #Maximum
+#mean(sample1_v3_lv2_wt_check_2$W_hh_v3_2)       #Mean
+#var(sample1_v3_lv2_wt_check_2$W_hh_v3_2)        #Variance
+#sum(sample1_v3_lv2_wt_check_2$W_hh_v3_2)        #Sum
+
+```
+
+```{r level 1 v1 wc, echo=FALSE}
+
+# Level 1 visit 1 weights
+
+# Here we create summation_i W_i|jk based on the household group j and
+# block group k. The variable created is sum_w_sub_by_hh. This will be
+# used to calculate all visit weights.
+
+sample1_v1_29 <- sample1_v1_28 %>%
+                 group_by(hhid) %>%
+                 mutate(sum_w_sub_by_hh = sum(W_sub))
+
+# Here we create n_j which the number of subjects in the household.
+sub_count_by_hh <- aggregate(subid ~ BGid + hhid,
+                             dat = population_v1_01, FUN=length)
+
+sub_count_by_hh <- sub_count_by_hh[order(sub_count_by_hh$BGid,
+                                         sub_count_by_hh$subid),]
+
+sub_count_by_hh <- rename(sub_count_by_hh, sub_count_by_hh = subid)
+
+sample1_v1_30 <- merge(sample1_v1_29, sub_count_by_hh, by=c("BGid", "hhid"))
+
+# Here we create the final sub weight component for visit 1.
+sample1_v1_31 <- mutate(sample1_v1_30,
+                        W_sub_v1 =
+                        W_sub*((sub_count_by_hh)/(sum_w_sub_by_hh)))
+
+# Statistical Measurements for level 1 Visit 1 weights
+#length(unique(sample1_v1_31$subid))  #N
+#min(sample1_v1_31$W_sub_v1)          #Minimum
+#median(sample1_v1_31$W_sub_v1)       #Median
+#max(sample1_v1_31$W_sub_v1)          #Maximum
+#mean(sample1_v1_31$W_sub_v1)         #Mean
+#var(sample1_v1_31$W_sub_v1)          #Variance
+#sum(sample1_v1_31$W_sub_v1)          #Sum
+
+```
+
+```{r level 1 v2 wc, echo=FALSE}
+
+# Level 1 visit 2 weights
+
+# Here we create a W_sub_v1*v2 weight that takes into consideration
+# whether a household group was a part of visit 2.
+# The variable created is w_sub_v2_r.
+sample1_v1_32 <- mutate(sample1_v1_31, w_sub_v2_r = W_sub_v1*v2)
+
+# Here we create summation_i w_sub_v2_r based on subject i
+# and whether the subject appears in v2.
+# The variable created is sum_w_sub_by_hh_v2.
+sample1_v1_33 <- sample1_v1_32 %>%
+                 group_by(hhid) %>%
+                 mutate(sum_w_sub_by_hh_v2 = sum(w_sub_v2_r))
+
+# Finally we create and the non-response adjusted W_sub_v1.
+# The variable created is W_sub_v2.
+
+sample1_v1_34 = mutate(sample1_v1_33,
+                       W_sub_v2 = 
+                       W_sub_v1*(sum_w_sub_by_hh)/(sum_w_sub_by_hh_v2))
+
+# Filter out part of the sample that did not attend visit 2.
+#sample1_v2_lv1_wt_check <- filter(sample1_v1_34, v2==1)
+
+# Statistical Measurements for level 1 visit 2 weights
+#length(unique(sample1_v2_lv1_wt_check$subid))  #N
+#min(sample1_v2_lv1_wt_check$W_sub_v2)          #Minimum
+#median(sample1_v2_lv1_wt_check$W_sub_v2)       #Median
+#max(sample1_v2_lv1_wt_check$W_sub_v2)          #Maximum
+#mean(sample1_v2_lv1_wt_check$W_sub_v2)         #Mean
+#var(sample1_v2_lv1_wt_check$W_sub_v2)          #Variance
+#sum(sample1_v2_lv1_wt_check$W_sub_v2)          #Sum
+
+```
+
+```{r level 1 v3 wc 1, echo=FALSE}
+
+# Level 1 visit 3 weights (attended v1 and v3)
+
+# Here we create a W_sub_v1*v3 weight that takes into consideration
+# whether a subject was a part of v1 and v3.
+# The variable created w_sub_v3_r_1.
+sample1_v1_35 <- mutate(sample1_v1_34, w_sub_v3_r_1 = W_sub_v1*v3)
+
+# Here we create summation_i w_sub_v3_r_1 based on subject i and
+# whether the subject appears in v1 and v3. The variable created is
+# sum_w_sub_by_hh_v3_1.
+sample1_v1_36 <- sample1_v1_35 %>%
+                 group_by(hhid) %>%
+                 mutate(sum_w_sub_by_hh_v3_1 = sum(w_sub_v3_r_1))
+
+# Finally we create the non-response adjusted W_sub_v1. The variable
+# created is W_sub_v3_1.
+sample1_v1_37 <- mutate(sample1_v1_36,
+                        W_sub_v3_1 = W_sub_v1*(sum_w_sub_by_hh)/(sum_w_sub_by_hh_v3_1))
+
+# Filter out part of the sample that did not attend v1 and v3.
+#sample1_v3_lv1_wt_check_1 <- filter(sample1_v1_37, v1==1 & v3==1)
+
+#length(unique(sample1_v3_lv1_wt_check_1$hhid))   #N
+#min(sample1_v3_lv1_wt_check_1$W_sub_v3_1)        #Minimum
+#median(sample1_v3_lv1_wt_check_1$W_sub_v3_1)     #Median
+#max(sample1_v3_lv1_wt_check_1$W_sub_v3_1)        #Maximum
+#mean(sample1_v3_lv1_wt_check_1$W_sub_v3_1)       #Mean
+#var(sample1_v3_lv1_wt_check_1$W_sub_v3_1)        #Variance
+#sum(sample1_v3_lv1_wt_check_1$W_sub_v3_1)        #Sum
+
+```
+
+```{r level 1 v3 wc 2, echo=FALSE}
+
+# Level 1 visit 3 weights (attended v1, v2, and v3)
+
+# Here we create a W_sub_v1*v123 weight that takes into consideration
+# whether a subject was a part of visit 1, 2, and 3.
+# The variable created w_sub_v3_r_2.
+sample1_v1_38 <- mutate(sample1_v1_37, w_sub_v3_r_2 = W_sub_v1*v123)
+
+# Here we create summation_i w_sub_v3_r_2 based on subject i and
+# whether the subject appears in v3. The variable created is
+# sum_w_sub_by_hh_v3_2.
+sample1_v1_39 <- sample1_v1_38 %>%
+                group_by(hhid) %>%
+                mutate(sum_w_sub_by_hh_v3_2 = sum(w_sub_v3_r_2))
+
+# Finally we create the non-repsonse adjusted W_sub_v1.
+# The variable created is W_sub_v3_1.
+sample1_v1_40 <- mutate(sample1_v1_39,
+                  W_sub_v3_2 =
+                  W_sub_v1*(sum_w_sub_by_hh)/(sum_w_sub_by_hh_v3_2))
+
+sample1_v1_41 <- sample1_v1_40 %>% select(BGid, hhid, subid, W_bg,
+                                          W_hh, W_sub, W_bghhsub,
+                                          W_bghh, W_hhsub, W_bg_v2,
+                                          W_bg_v3_1, W_bg_v3_2,
+                                          W_hh_v1, W_hh_v2, W_hh_v3_1,
+                                          W_hh_v3_2,
+                                          W_sub_v1, W_sub_v2,
+                                          W_sub_v3_1, W_sub_v3_2,
+                                          dat_num)
+
+# Filter out part of the sample that did not attend v1, v2, and v3.
+#sample1_v3_lv1_wt_check_2 <- filter(sample1_v1_40, v123==1)
+
+# Statistical Measurements for level 1 Visit 3 weights (attended v1,
+# v2, and v3).
+#length(unique(sample1_v3_lv1_wt_check_2$hhid))   #N
+#min(sample1_v3_lv1_wt_check_2$W_sub_v3_2)        #Minimum
+#median(sample1_v3_lv1_wt_check_2$W_sub_v3_2)     #Median
+#max(sample1_v3_lv1_wt_check_2$W_sub_v3_2)        #Maximum
+#mean(sample1_v3_lv1_wt_check_2$W_sub_v3_2)       #Mean
+#var(sample1_v3_lv1_wt_check_2$W_sub_v3_2)        #Variance
+#sum(sample1_v3_lv1_wt_check_2$W_sub_v3_2)        #Sum
+
+
+```
+
+```{r merging to original sample created}
+
+sample1_v1_42 <- inner_join(sample1_01, sample1_v1_41)
+#sample1_v1_42_2 <- left_join(sample1_01, sample1_v1_41)
+#sample1_v1_42_3 <- merge(x = sample1_01, y = sample1_v1_41, by = c("subid", "hhid", "BGid"))
+
+#length(unique(sample1_01$BGid))
+#length(unique(sample1_v1_42_1$BGid))
+#length(unique(sample1_v1_42_2$BGid))
+
+#length(unique(sample1_01$hhid))
+#length(unique(sample1_v1_42_1$hhid))
+#length(unique(sample1_v1_42_2$hhid))
+
+#length(unique(sample1_v1_42_1$subid))
+#length(unique(sample1_v1_42_2$subid))
+#length(unique(sample1_01$subid))
+
+#ncol(sample1_01)
+#ncol(sample1_v1_42_1)
+#ncol(sample1_v1_42_2)
+
+#colnames(sample1_01)
+#colnames(sample1_v1_42_1)
+#colnames(sample1_v1_42_2)
+#colnames(sample1_v1_42_3)
+
+#discrep <- mapply(setdiff, sample1_v1_42, sample1_v1_42_3)
+#discrep
+```
+
